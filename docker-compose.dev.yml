@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  frontend-dev:
+    image: node:18-alpine
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3001
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - backend-dev
+    networks:
+      - neonbrush-dev-network
+
+  backend-dev:
+    image: node:18-alpine
+    working_dir: /app
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - FRONTEND_URL=http://localhost:5173
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - uploads-dev-data:/app/uploads
+    command: sh -c "npm install && npm run dev"
+    networks:
+      - neonbrush-dev-network
+
+volumes:
+  uploads-dev-data:
+
+networks:
+  neonbrush-dev-network:
+    driver: bridge
