@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import './App.css'
-import EmailRequestForm from './components/EmailRequestForm'
 import EmailSuccessNotification from './components/EmailSuccessNotification'
 import OriginFilter from './components/OriginFilter'
+import EnterDetails from './components/EnterDetails'
 
 interface FileInfo {
   name: string;
@@ -26,18 +26,25 @@ interface OriginStats {
   lastUpload: number | null;
 }
 
+interface EmailOptions {
+  stayInTouch: boolean;
+  includeScreenshots: boolean;
+  include3DModels: boolean;
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function App() {
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [selectedFileForEmail, setSelectedFileForEmail] = useState<FileInfo | null>(null);
+  const [selectedFileForDetails, setSelectedFileForDetails] = useState<FileInfo | null>(null);
   const [emailSuccess, setEmailSuccess] = useState<EmailSuccess | null>(null);
   const [appMode, setAppMode] = useState<'upload' | 'tablet'>('upload');
   const [availableOrigins, setAvailableOrigins] = useState<string[]>([]);
   const [selectedOrigin, setSelectedOrigin] = useState<string>('all');
   const [originStats, setOriginStats] = useState<OriginStats[]>([]);
+  const [timeFilter, setTimeFilter] = useState<'all' | 'recent'>('all');
 
   const fetchFiles = async (origin: string = 'all') => {
     try {
@@ -140,17 +147,63 @@ function App() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const handleEmailRequest = (file: FileInfo) => {
-    setSelectedFileForEmail(file);
+  const handleFileCardClick = (file: FileInfo) => {
+    if (appMode === 'tablet') {
+      setSelectedFileForDetails(file);
+    }
   };
 
-  const handleCloseModal = () => {
-    setSelectedFileForEmail(null);
+  const handleDetailsBack = () => {
+    setSelectedFileForDetails(null);
+  };
+
+  const handleDetailsSend = async (email: string, options: EmailOptions) => {
+    if (!selectedFileForDetails) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/email/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          filename: selectedFileForDetails.name,
+          options
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setEmailSuccess({
+          jobId: result.jobId,
+          email,
+          filename: selectedFileForDetails.name
+        });
+        setSelectedFileForDetails(null);
+      } else {
+        throw new Error('Failed to send email request');
+      }
+    } catch (error) {
+      console.error('Email request error:', error);
+      throw error;
+    }
   };
 
   const handleCloseNotification = () => {
     setEmailSuccess(null);
   };
+
+  // Filter files based on time criteria (Recent = last 3 minutes)
+  const getFilteredFiles = () => {
+    if (timeFilter === 'recent') {
+      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+      return files.filter(file => new Date(file.uploadDate) >= threeMinutesAgo);
+    }
+    return files;
+  };
+
+  const filteredFiles = getFilteredFiles();
 
   return (
     <div className="app">
@@ -219,29 +272,65 @@ function App() {
             onOriginChange={setSelectedOrigin}
             originStats={originStats}
           />
+          
+          {/* Time Filter Section - Only show in Tablet Mode */}
+          {appMode === 'tablet' && (
+            <div className="time-filter">
+              <div className="filter-header">
+                <h3>📅 Time Filter</h3>
+              </div>
+              <div className="time-buttons">
+                <button 
+                  className={`time-button ${timeFilter === 'all' ? 'active' : ''}`}
+                  onClick={() => setTimeFilter('all')}
+                >
+                  <div className="time-info">
+                    <div className="time-label">All Files</div>
+                    <div className="time-count">{files.length} files</div>
+                  </div>
+                </button>
+                <button 
+                  className={`time-button ${timeFilter === 'recent' ? 'active' : ''}`}
+                  onClick={() => setTimeFilter('recent')}
+                >
+                  <div className="time-info">
+                    <div className="time-label">Recent (3 min)</div>
+                    <div className="time-count">{filteredFiles.length} files</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="files-section">
           <h2>
             {appMode === 'upload' ? '📋 File List' : '📧 Select File to Email'} 
             {selectedOrigin === 'all' 
-              ? ` (${files.length} files total)` 
-              : ` (${files.length} files from Headset ${selectedOrigin})`
+              ? ` (${filteredFiles.length} files${appMode === 'tablet' && timeFilter === 'recent' ? ' in last 3 min' : ' total'})` 
+              : ` (${filteredFiles.length} files from Headset ${selectedOrigin}${appMode === 'tablet' && timeFilter === 'recent' ? ' in last 3 min' : ''})`
             }
           </h2>
-          {files.length === 0 ? (
+          {filteredFiles.length === 0 ? (
             <p className="no-files">
-              {selectedOrigin === 'all'
-                ? (appMode === 'upload' 
-                    ? 'No files uploaded yet. Upload your first file above!' 
-                    : 'No files available for email requests.')
-                : `No files from Headset ${selectedOrigin}.`
+              {timeFilter === 'recent' && appMode === 'tablet'
+                ? 'No files uploaded in the last 3 minutes.'
+                : (selectedOrigin === 'all'
+                  ? (appMode === 'upload' 
+                      ? 'No files uploaded yet. Upload your first file above!' 
+                      : 'No files available for email requests.')
+                  : `No files from Headset ${selectedOrigin}.`
+                )
               }
             </p>
           ) : (
             <div className="files-grid">
-              {files.map((file) => (
-                <div key={file.name} className="file-card">
+              {filteredFiles.map((file) => (
+                <div 
+                  key={file.name} 
+                  className={`file-card ${appMode === 'tablet' ? 'clickable-file-card' : ''}`}
+                  onClick={() => appMode === 'tablet' ? handleFileCardClick(file) : undefined}
+                >
                   <div className="file-info">
                     <h3 className="file-name">{file.originalName || file.name}</h3>
                     <div className="file-meta">
@@ -252,33 +341,29 @@ function App() {
                       <p className="file-origin">📡 Headset {file.origin}</p>
                     </div>
                   </div>
-                  <div className="file-actions">
-                    {appMode === 'upload' ? (
-                      <>
-                        <a
-                          href={`${API_BASE_URL}${file.path}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="download-button"
-                        >
-                          📥 Download
-                        </a>
-                        <button
-                          onClick={() => deleteFile(file.name)}
-                          className="delete-button"
-                        >
-                          🗑️ Delete
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => handleEmailRequest(file)}
-                        className="email-button"
+                  {appMode === 'upload' && (
+                    <div className="file-actions">
+                      <a
+                        href={`${API_BASE_URL}${file.path}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="download-button"
                       >
-                        📧 Request Email
+                        📥 Download
+                      </a>
+                      <button
+                        onClick={() => deleteFile(file.name)}
+                        className="delete-button"
+                      >
+                        🗑️ Delete
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                  {appMode === 'tablet' && (
+                    <div className="tablet-hint">
+                      <p>👆 Tap to request this file</p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -286,15 +371,12 @@ function App() {
         </section>
       </main>
 
-      {/* Email Request Modal */}
-      {selectedFileForEmail && (
-        <EmailRequestForm
-          file={selectedFileForEmail}
-          onClose={handleCloseModal}
-          onSuccess={(jobId, email) => {
-            setEmailSuccess({ jobId, email, filename: selectedFileForEmail.name });
-            setSelectedFileForEmail(null);
-          }}
+      {/* Enter Details Modal */}
+      {selectedFileForDetails && (
+        <EnterDetails
+          file={selectedFileForDetails}
+          onBack={handleDetailsBack}
+          onSend={handleDetailsSend}
         />
       )}
 

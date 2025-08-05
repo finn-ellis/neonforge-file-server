@@ -1,6 +1,11 @@
-import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
+
+export interface EmailOptions {
+  stayInTouch: boolean;
+  includeScreenshots: boolean;
+  include3DModels: boolean;
+}
 
 export interface EmailJob {
   id: string;
@@ -10,43 +15,75 @@ export interface EmailJob {
   timestamp: Date;
   status: 'pending' | 'sending' | 'sent' | 'failed';
   retryCount: number;
+  fileSize?: number;
+  originalName?: string;
+  requestedBy?: string; // IP address of requester
+  options?: EmailOptions; // User preferences for email content
 }
 
 class EmailService {
-  private transporter!: nodemailer.Transporter;
-  private emailQueue: EmailJob[] = [];
-  private isProcessing = false;
+  private queueFilePath: string;
 
   constructor() {
-    this.initializeTransporter();
-    this.startQueueProcessor();
+    // Create queue file path in the data directory
+    const dataDir = path.join(process.cwd(), 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    this.queueFilePath = path.join(dataDir, 'email_queue.json');
+
+    // Initialize queue file if it doesn't exist
+    if (!fs.existsSync(this.queueFilePath)) {
+      this.saveQueue([]);
+    }
+
+    console.log(`📧 Email queue will be saved to: ${this.queueFilePath}`);
   }
 
-  private initializeTransporter() {
-    // Configure email transporter based on environment
-    this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false, // true for 465, false for other ports
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    // Verify transporter configuration
-    this.transporter.verify((error, success) => {
-      if (error) {
-        console.warn('⚠️ Email transporter verification failed:', error.message);
-        console.warn('📧 Email functionality will be simulated');
-      } else {
-        console.log('✅ Email server is ready to send messages');
-      }
-    });
+  private loadQueue(): EmailJob[] {
+    try {
+      const data = fs.readFileSync(this.queueFilePath, 'utf8');
+      const queue = JSON.parse(data);
+      // Convert timestamp strings back to Date objects
+      return queue.map((job: any) => ({
+        ...job,
+        timestamp: new Date(job.timestamp)
+      }));
+    } catch (error) {
+      console.warn('⚠️ Could not load email queue, starting with empty queue');
+      return [];
+    }
   }
 
-  async queueEmail(email: string, filename: string, filePath: string): Promise<string> {
+  private saveQueue(queue: EmailJob[]): void {
+    try {
+      fs.writeFileSync(this.queueFilePath, JSON.stringify(queue, null, 2));
+    } catch (error) {
+      console.error('❌ Failed to save email queue:', error);
+    }
+  }
+
+  async queueEmail(
+    email: string, 
+    filename: string, 
+    filePath: string, 
+    requestedBy?: string,
+    options?: EmailOptions
+  ): Promise<string> {
     const jobId = `email_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Get file stats for additional metadata
+    let fileSize = 0;
+    let originalName = filename;
+    
+    try {
+      if (fs.existsSync(filePath)) {
+        const stats = fs.statSync(filePath);
+        fileSize = stats.size;
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not get file stats for:', filePath);
+    }
     
     const emailJob: EmailJob = {
       id: jobId,
@@ -55,112 +92,31 @@ class EmailService {
       filePath,
       timestamp: new Date(),
       status: 'pending',
-      retryCount: 0
+      retryCount: 0,
+      fileSize,
+      originalName,
+      requestedBy,
+      options
     };
 
-    this.emailQueue.push(emailJob);
+    // Load current queue, add new job, and save
+    const currentQueue = this.loadQueue();
+    currentQueue.push(emailJob);
+    this.saveQueue(currentQueue);
+    
     console.log(`📧 Email queued: ${email} for file ${filename} (Job ID: ${jobId})`);
+    if (options) {
+      const selectedOptions = [];
+      if (options.stayInTouch) selectedOptions.push('Stay in touch');
+      if (options.includeScreenshots) selectedOptions.push('Include screenshots');
+      if (options.include3DModels) selectedOptions.push('Include 3D models');
+      if (selectedOptions.length > 0) {
+        console.log(`   📋 Options: ${selectedOptions.join(', ')}`);
+      }
+    }
+    console.log(`💾 Queue saved to: ${this.queueFilePath}`);
     
     return jobId;
-  }
-
-  private async startQueueProcessor() {
-    setInterval(async () => {
-      if (!this.isProcessing && this.emailQueue.length > 0) {
-        await this.processQueue();
-      }
-    }, 5000); // Process queue every 5 seconds
-  }
-
-  private async processQueue() {
-    this.isProcessing = true;
-
-    const pendingJobs = this.emailQueue.filter(job => job.status === 'pending');
-    
-    for (const job of pendingJobs) {
-      try {
-        job.status = 'sending';
-        await this.sendEmail(job);
-        job.status = 'sent';
-        console.log(`✅ Email sent successfully: ${job.email} (Job ID: ${job.id})`);
-      } catch (error) {
-        job.retryCount++;
-        if (job.retryCount >= 3) {
-          job.status = 'failed';
-          console.error(`❌ Email failed after 3 retries: ${job.email} (Job ID: ${job.id})`);
-        } else {
-          job.status = 'pending';
-          console.warn(`⚠️ Email retry ${job.retryCount}/3: ${job.email} (Job ID: ${job.id})`);
-        }
-      }
-    }
-
-    // Clean up old jobs (older than 24 hours)
-    const cutoffTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    this.emailQueue = this.emailQueue.filter(job => job.timestamp > cutoffTime);
-
-    this.isProcessing = false;
-  }
-
-  private async sendEmail(job: EmailJob): Promise<void> {
-    if (!fs.existsSync(job.filePath)) {
-      throw new Error('File not found');
-    }
-
-    const stats = fs.statSync(job.filePath);
-    const fileSize = this.formatFileSize(stats.size);
-    
-    // Check if email credentials are configured
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      // Simulate email sending for development
-      console.log(`📧 [SIMULATED] Email sent to: ${job.email}`);
-      console.log(`📎 File: ${job.filename} (${fileSize})`);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate delay
-      return;
-    }
-
-    const mailOptions = {
-      from: process.env.SMTP_USER,
-      to: job.email,
-      subject: `🎨 Your NeonBrush File: ${job.filename}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center; color: white;">
-            <h1 style="margin: 0;">🎨 NeonBrush File Server</h1>
-            <p style="margin: 10px 0 0 0;">Your requested file is ready!</p>
-          </div>
-          
-          <div style="padding: 30px; background: #f8f9fa;">
-            <h2 style="color: #333; margin-top: 0;">📁 File Details</h2>
-            <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #667eea;">
-              <p><strong>Filename:</strong> ${job.filename}</p>
-              <p><strong>Size:</strong> ${fileSize}</p>
-              <p><strong>Requested:</strong> ${job.timestamp.toLocaleString()}</p>
-            </div>
-            
-            <p style="margin-top: 20px;">Your file is attached to this email. If you have any issues accessing the file, please contact support.</p>
-            
-            <div style="text-align: center; margin-top: 30px;">
-              <div style="background: linear-gradient(45deg, #667eea, #764ba2); color: white; padding: 15px; border-radius: 8px; display: inline-block;">
-                <strong>✨ Thanks for using NeonBrush File Server!</strong>
-              </div>
-            </div>
-          </div>
-          
-          <div style="background: #e9ecef; padding: 15px; text-align: center; font-size: 12px; color: #6c757d;">
-            <p>This email was sent automatically from NeonBrush File Server.</p>
-          </div>
-        </div>
-      `,
-      attachments: [
-        {
-          filename: job.filename,
-          path: job.filePath
-        }
-      ]
-    };
-
-    await this.transporter.sendMail(mailOptions);
   }
 
   private formatFileSize(bytes: number): string {
@@ -172,17 +128,65 @@ class EmailService {
   }
 
   getQueueStatus(): { total: number; pending: number; sending: number; sent: number; failed: number } {
-    const total = this.emailQueue.length;
-    const pending = this.emailQueue.filter(job => job.status === 'pending').length;
-    const sending = this.emailQueue.filter(job => job.status === 'sending').length;
-    const sent = this.emailQueue.filter(job => job.status === 'sent').length;
-    const failed = this.emailQueue.filter(job => job.status === 'failed').length;
+    const queue = this.loadQueue();
+    const total = queue.length;
+    const pending = queue.filter(job => job.status === 'pending').length;
+    const sending = queue.filter(job => job.status === 'sending').length;
+    const sent = queue.filter(job => job.status === 'sent').length;
+    const failed = queue.filter(job => job.status === 'failed').length;
 
     return { total, pending, sending, sent, failed };
   }
 
   getJobStatus(jobId: string): EmailJob | null {
-    return this.emailQueue.find(job => job.id === jobId) || null;
+    const queue = this.loadQueue();
+    return queue.find(job => job.id === jobId) || null;
+  }
+
+  // Method to get all pending jobs (useful for external processors)
+  getPendingJobs(): EmailJob[] {
+    const queue = this.loadQueue();
+    return queue.filter(job => job.status === 'pending');
+  }
+
+  // Method to update job status (useful for external processors)
+  updateJobStatus(jobId: string, status: EmailJob['status'], retryCount?: number): boolean {
+    const queue = this.loadQueue();
+    const jobIndex = queue.findIndex(job => job.id === jobId);
+    
+    if (jobIndex === -1) {
+      return false;
+    }
+
+    queue[jobIndex].status = status;
+    if (retryCount !== undefined) {
+      queue[jobIndex].retryCount = retryCount;
+    }
+
+    this.saveQueue(queue);
+    return true;
+  }
+
+  // Method to clean up old jobs
+  cleanupOldJobs(olderThanHours: number = 24): number {
+    const queue = this.loadQueue();
+    const cutoffTime = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
+    const initialLength = queue.length;
+    
+    const filteredQueue = queue.filter(job => job.timestamp > cutoffTime);
+    this.saveQueue(filteredQueue);
+    
+    const removedCount = initialLength - filteredQueue.length;
+    if (removedCount > 0) {
+      console.log(`🧹 Cleaned up ${removedCount} old email jobs`);
+    }
+    
+    return removedCount;
+  }
+
+  // Get the queue file path (useful for external processors)
+  getQueueFilePath(): string {
+    return this.queueFilePath;
   }
 }
 

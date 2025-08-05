@@ -4,8 +4,10 @@
 - 📋 **File Management**: View, download, and delete files
 - 📧 **Email File Sharing**: Request files via email (perfect for tablet users)
 - 🎯 **Origin Filtering**: Classify and filter files by their source headset (H1, H2, H3, H4)
+- ⏰ **Recent Filter**: Show only files uploaded in the last 3 minutes (Tablet Mode)
 - 🎛️ **Dual Mode Interface**: Upload mode for headsets, Tablet mode for email requests
 - 🏷️ **Smart File Naming**: Files are automatically prefixed with headset identifiers
+- 📮 **Offline Email Queue**: Email requests are saved to disk for processing after events
 - 🎨 **Modern UI**: Beautiful gradient design with responsive layout
 - 🐳 **Containerized**: Full Docker support for easy deployment
 - 🔒 **Secure**: CORS protection and file validation
@@ -218,3 +220,108 @@ export default tseslint.config([
   },
 ])
 ```
+
+## 📮 Offline Email Queue System
+
+The NeonBrush File Server is designed for offline/local network events where internet connectivity may not be available during the event. Email requests are saved to a persistent queue file that can be processed later when internet is available.
+
+### How It Works
+
+1. **During the Event** (No Internet Required):
+   - Users request files via email using the Tablet Mode interface
+   - Email requests are saved to `uploads/email_queue.json`
+   - No actual emails are sent during the event
+
+2. **After the Event** (Internet Required):
+   - Run the Python email processor to send all queued emails
+   - Files are automatically attached and sent to requested recipients
+   - Queue is updated with processing status
+
+### Processing Email Queue
+
+#### Option 1: Using the Windows Batch Script (Easiest)
+```bash
+# Double-click or run from command prompt
+send_emails.bat
+```
+
+This provides an interactive menu to:
+- Preview emails (dry run)
+- Send emails with SMTP configuration
+- Create sample configuration files
+
+#### Option 2: Using Python Directly
+```bash
+# Dry run (preview what would be sent)
+python process_email_queue.py --dry-run
+
+# Send emails (requires SMTP configuration)
+python process_email_queue.py
+
+# Use custom queue file
+python process_email_queue.py ./custom/path/email_queue.json
+
+# Use custom SMTP configuration
+python process_email_queue.py --smtp-config my_smtp.json
+```
+
+### SMTP Configuration
+
+Create `smtp_config.json` with your email settings:
+
+```json
+{
+  "host": "smtp.gmail.com",
+  "port": 587,
+  "user": "your-email@gmail.com",
+  "password": "your-app-password",
+  "use_tls": true
+}
+```
+
+**Gmail Users**: Use an [App Password](https://support.google.com/accounts/answer/185833) if 2FA is enabled.
+
+### Email Queue File Format
+
+The queue file (`uploads/email_queue.json`) contains:
+
+```json
+[
+  {
+    "id": "email_1704067200000_abc123def",
+    "email": "user@example.com",
+    "filename": "H1_presentation-67890.pdf",
+    "filePath": "./uploads/H1_presentation-67890.pdf",
+    "timestamp": "2024-01-01T12:00:00.000Z",
+    "status": "pending",
+    "retryCount": 0,
+    "fileSize": 2048576,
+    "originalName": "presentation.pdf",
+    "requestedBy": "192.168.1.100"
+  }
+]
+```
+
+### Processing Status
+
+Email jobs have the following statuses:
+- **`pending`**: Waiting to be processed
+- **`sending`**: Currently being sent
+- **`sent`**: Successfully delivered
+- **`failed`**: Failed after 3 retry attempts
+
+### Troubleshooting
+
+1. **No emails in queue**: Check that users actually requested files via Tablet Mode
+2. **SMTP errors**: Verify `smtp_config.json` credentials and network connectivity
+3. **File not found**: Ensure uploaded files haven't been deleted before processing
+4. **Python not found**: Install Python 3.6+ from [python.org](https://python.org)
+
+### Example Workflow
+
+1. **Event Setup**: Start the file server with `docker-compose up`
+2. **During Event**: Users upload files (headsets) and request emails (tablets)
+3. **Event End**: Stop the server, collect the system with queue file
+4. **Post-Event**: Copy files to internet-connected computer
+5. **Email Processing**: Run `send_emails.bat` or `python process_email_queue.py`
+6. **Verification**: Check processing logs and email delivery status

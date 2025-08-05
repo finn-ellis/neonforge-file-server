@@ -22,9 +22,9 @@ This is a containerized file server application built with:
 5. Use environment variables for configuration
 
 ## Key Components
-- File upload with drag & drop functionality
 - File listing and management
-- Download and delete operations
+- User-flow for requesting files via email
+- Backend for queueing emails to be sent later
 - Responsive design with gradient styling
 
 ## Docker Commands

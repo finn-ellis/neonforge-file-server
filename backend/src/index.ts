@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import EmailService from './emailService';
+import EmailService, { EmailOptions } from './emailService';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -290,7 +290,7 @@ app.delete('/api/files/:filename', (req, res) => {
 // Email endpoints
 app.post('/api/email/send', async (req, res) => {
   try {
-    const { email, filename } = req.body;
+    const { email, filename, options } = req.body;
     
     if (!email || !filename) {
       return res.status(400).json({ error: 'Email and filename are required' });
@@ -308,13 +308,17 @@ app.post('/api/email/send', async (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    const jobId = await emailService.queueEmail(email, filename, filePath);
+    // Get client IP for requestedBy field
+    const clientIP = getClientIP(req);
+    
+    const jobId = await emailService.queueEmail(email, filename, filePath, clientIP, options);
     
     res.json({
       message: 'Email queued successfully',
       jobId,
       email,
-      filename
+      filename,
+      options
     });
   } catch (error) {
     console.error('Email queue error:', error);
