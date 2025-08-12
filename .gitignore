@@ -54,6 +54,7 @@ ehthumbs.db
 
 # Python
 __pycache__
+.venv/
 
 # File Server
 /metadata/

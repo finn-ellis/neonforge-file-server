@@ -1,0 +1,97 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build NeonBrush File Server",
+			"type": "shell",
+			"command": "docker-compose",
+			"args": [
+				"build"
+			],
+			"group": "build",
+			"problemMatcher": [],
+			"isBackground": false
+		},
+		{
+			"label": "Start Development Environment",
+			"type": "shell",
+			"command": "docker-compose",
+			"args": ["-f", "docker-compose.dev.yml", "up"],
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Start Production Environment",
+			"type": "shell",
+			"command": "docker-compose",
+			"args": ["up", "-d"],
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Stop All Containers",
+			"type": "shell",
+			"command": "docker-compose",
+			"args": ["down"],
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Frontend: Install Dependencies",
+			"type": "shell",
+			"command": "npm",
+			"args": ["install"],
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Frontend: Start Dev Server",
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "dev"],
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Backend: Install Dependencies",
+			"type": "shell",
+			"command": "npm",
+			"args": ["install"],
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Backend: Start Dev Server",
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "dev"],
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Backend: Build TypeScript",
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "build"],
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": ["$tsc"]
+		}
+	]
+}
