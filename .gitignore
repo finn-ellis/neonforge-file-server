@@ -59,3 +59,4 @@ __pycache__
 # File Server
 /metadata/
 /uploads/
+/data/
