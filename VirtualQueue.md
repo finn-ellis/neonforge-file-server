@@ -1,5 +1,5 @@
-# Virtual Queue System
-Implement the outlined queue system to the current app.
+# KioskQueue - Virtual Queue System for event kiosks
+Develop a 
 
 ## System Settings
 - LineCount = 2: number of parallel lines in the queue

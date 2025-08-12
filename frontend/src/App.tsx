@@ -32,7 +32,7 @@ interface EmailOptions {
   include3DModels: boolean;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/files';
 
 function App() {
   const [files, setFiles] = useState<FileInfo[]>([]);
@@ -49,8 +49,8 @@ function App() {
   const fetchFiles = async (origin: string = 'all') => {
     try {
       const url = origin === 'all' 
-        ? `${API_BASE_URL}/api/files`
-        : `${API_BASE_URL}/api/files?origin=${origin}`;
+        ? `${API_BASE_URL}/all`
+        : `${API_BASE_URL}?origin=${origin}`;
       
       const response = await fetch(url);
       if (response.ok) {
@@ -65,7 +65,7 @@ function App() {
 
   const fetchOriginStats = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/origins`);
+      const response = await fetch(`${API_BASE_URL}/origins`);
       if (response.ok) {
         const data = await response.json();
         setOriginStats(data.origins || []);
@@ -86,7 +86,7 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/upload`, {
+      const response = await fetch(`${API_BASE_URL}/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -123,7 +123,7 @@ function App() {
 
   const deleteFile = async (filename: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/files/${filename}`, {
+      const response = await fetch(`${API_BASE_URL}/${filename}`, {
         method: 'DELETE',
       });
 
@@ -161,7 +161,7 @@ function App() {
     if (!selectedFileForDetails) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/email/send`, {
+      const response = await fetch(`${API_BASE_URL}/email/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

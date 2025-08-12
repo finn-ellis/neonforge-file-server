@@ -5,7 +5,7 @@
 ## Project Overview
 This is a containerized file server application built with:
 - **Frontend**: React TypeScript with Vite
-- **Backend**: Node.js Express with TypeScript
+- **Backend**: Python Flask
 - **Containerization**: Docker with docker-compose
 
 ## Architecture

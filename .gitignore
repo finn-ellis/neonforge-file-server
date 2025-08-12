@@ -51,3 +51,10 @@ backend/uploads/
 # OS generated files
 Thumbs.db
 ehthumbs.db
+
+# Python
+__pycache__
+
+# File Server
+/metadata/
+/uploads/
