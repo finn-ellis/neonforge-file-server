@@ -45,19 +45,12 @@ class ServiceAnnouncer:
             f"{self.service_name}.{self.service_type}",
             addresses=[socket.inet_aton(ip_address)],
             port=self.port,
-            properties={'description': 'My awesome Flask file server.'},
+            properties={'description': 'NeonForge File Server.'},
         )
 
         self.zeroconf = Zeroconf()
         self.zeroconf.register_service(self.service_info)
         print("INFO: Service registered.")
-
-        # Keep the thread alive until the main app exits
-        try:
-            while True:
-                sleep(0.5)
-        except KeyboardInterrupt:
-            pass # This will be handled by the stop method
 
     def stop(self):
         """

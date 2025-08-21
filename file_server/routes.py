@@ -7,7 +7,7 @@ import time
 import random
 import string
 from datetime import datetime
-from .types import Metadata
+from .fileserver_types import Metadata
 
 if TYPE_CHECKING:  # pragma: no cover
     from . import FileServer
@@ -34,29 +34,14 @@ def create_blueprint(fs: "FileServer", url_prefix: str) -> Blueprint:
 
     @bp.get("/all")
     def list_files():
+        # This endpoint is retained for polling-based clients or for debugging,
+        # but socket-based clients should use the 'get_files' event.
         origin = request.args.get("origin")
-        all_meta = fs._load_all_metadata()  # noqa: SLF001
-        filtered = [m for m in all_meta if m.get("originAlias") == origin] if origin else all_meta
-        filtered.sort(key=lambda m: m.get("uploadDate", ""), reverse=True)
-        files = [
-            {
-                "name": m["filename"],
-                "originalName": m.get("originalName"),
-                "size": m.get("size"),
-                "uploadDate": m.get("uploadDate"),
-                "origin": m.get("originAlias"),
-                "path": f"{url_prefix}/{m['filename']}",
-            }
-            for m in filtered
-        ]
-        available_origins = sorted(
-            [alias for alias in (m.get("originAlias") for m in all_meta) if isinstance(alias, str)]
-        )
-        return jsonify({
-            "files": files,
-            "totalFiles": len(files),
-            "availableOrigins": available_origins,
-        })
+        files_data = fs._get_all_files_and_origins(url_prefix)  # noqa: SLF001
+        if origin and origin != 'all':
+            files_data['files'] = [f for f in files_data['files'] if f['origin'] == origin]
+            files_data['totalFiles'] = len(files_data['files'])
+        return jsonify(files_data)
 
     @bp.get("/origins")
     def origins():
@@ -112,6 +97,11 @@ def create_blueprint(fs: "FileServer", url_prefix: str) -> Blueprint:
         }
         fs._save_metadata(metadata)  # noqa: SLF001
         current_app.logger.info(f"File uploaded from {alias} ({ip}): {file.filename}")
+
+        if fs._socketio:  # noqa: SLF001
+            files_data = fs._get_all_files_and_origins(url_prefix)  # noqa: SLF001
+            fs._socketio.emit("files_updated", files_data)  # noqa: SLF001
+
         return jsonify(
             {
                 "message": "File uploaded successfully",
@@ -124,7 +114,7 @@ def create_blueprint(fs: "FileServer", url_prefix: str) -> Blueprint:
                 },
             }
         )
-
+    
     @bp.get("/<filename>")
     def get_file(filename: str):
         uploads_dir = fs._uploads_dir()  # noqa: SLF001

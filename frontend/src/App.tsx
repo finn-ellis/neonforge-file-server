@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import socket from './socket';
 import './App.css'
 import EmailSuccessNotification from './components/EmailSuccessNotification'
 import OriginFilter from './components/OriginFilter'
@@ -45,23 +46,30 @@ function App() {
   const [selectedOrigin, setSelectedOrigin] = useState<string>('all');
   const [originStats, setOriginStats] = useState<OriginStats[]>([]);
   const [timeFilter, setTimeFilter] = useState<'all' | 'recent'>('all');
+  const [currentTime, setCurrentTime] = useState(Date.now());
 
-  const fetchFiles = async (origin: string = 'all') => {
-    try {
-      const url = origin === 'all' 
-        ? `${API_BASE_URL}/all`
-        : `${API_BASE_URL}?origin=${origin}`;
-      
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setFiles(data.files || []);
-        setAvailableOrigins(data.availableOrigins || []);
-      }
-    } catch (error) {
-      console.error('Error fetching files:', error);
+  // Effect to update current time for filtering
+  useEffect(() => {
+    if (timeFilter === 'recent') {
+      const interval = setInterval(() => {
+        setCurrentTime(Date.now());
+      }, 1000); // Update every second
+      return () => clearInterval(interval);
     }
-  };
+  }, [timeFilter]);
+
+  // Listen for socket updates
+  useEffect(() => {
+    socket.on('files_updated', (data) => {
+      setFiles(data.files || []);
+      setAvailableOrigins(data.availableOrigins || []);
+    });
+    // Initial fetch (optional, or wait for first socket event)
+    socket.emit('get_files', { origin: selectedOrigin });
+    return () => {
+      socket.off('files_updated');
+    };
+  }, [selectedOrigin]);
 
   const fetchOriginStats = async () => {
     try {
@@ -76,7 +84,7 @@ function App() {
   };
 
   useEffect(() => {
-    fetchFiles(selectedOrigin);
+    // fetchFiles(selectedOrigin);
     fetchOriginStats();
   }, [selectedOrigin]);
 
@@ -84,16 +92,14 @@ function App() {
     setUploading(true);
     const formData = new FormData();
     formData.append('file', file);
-
     try {
       const response = await fetch(`${API_BASE_URL}/upload`, {
         method: 'POST',
         body: formData,
       });
-
       if (response.ok) {
-        await fetchFiles(selectedOrigin); // Refresh file list
-        await fetchOriginStats(); // Refresh origin stats
+        // No need to manually refresh file list; socket event will update
+        await fetchOriginStats();
         console.log('File uploaded successfully');
       } else {
         console.error('Upload failed');
@@ -128,7 +134,7 @@ function App() {
       });
 
       if (response.ok) {
-        await fetchFiles(selectedOrigin); // Refresh file list
+        // await fetchFiles(selectedOrigin); // Refresh file list
         await fetchOriginStats(); // Refresh origin stats
         console.log('File deleted successfully');
       } else {
@@ -197,7 +203,7 @@ function App() {
   // Filter files based on time criteria (Recent = last 3 minutes)
   const getFilteredFiles = () => {
     if (timeFilter === 'recent') {
-      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+      const threeMinutesAgo = new Date(currentTime - 3 * 60 * 1000);
       return files.filter(file => new Date(file.uploadDate) >= threeMinutesAgo);
     }
     return files;

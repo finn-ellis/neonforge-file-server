@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, List
 
 from flask import current_app, Blueprint, request
 from flask_cors import CORS
-from .types import Metadata
+from .fileserver_types import Metadata
 
 class EmailJob:
     def __init__(self, job_id: str, email: str, filename: str, file_path: str, requested_by: Optional[str], options: Optional[Dict[str, Any]]):
@@ -189,6 +189,46 @@ class FileServer:
         bp = create_blueprint(self, url_prefix)
         app.register_blueprint(bp, url_prefix=url_prefix)
         self._bp = bp
+
+        if self._socketio:
+            @self._socketio.on('connect')
+            def handle_connect():
+                if self._socketio:
+                    data = self._get_all_files_and_origins(url_prefix)
+                    self._socketio.emit('files_updated', data)
+
+            @self._socketio.on('get_files')
+            def handle_get_files(data):
+                if self._socketio:
+                    origin = data.get('origin') if data else None
+                    files_data = self._get_all_files_and_origins(url_prefix)
+                    if origin and origin != 'all':
+                        files_data['files'] = [f for f in files_data['files'] if f['origin'] == origin]
+                        files_data['totalFiles'] = len(files_data['files'])
+                    self._socketio.emit('files_updated', files_data)
+
+    def _get_all_files_and_origins(self, url_prefix: str) -> dict:
+        all_meta = self._load_all_metadata()
+        all_meta.sort(key=lambda m: m.get("uploadDate", ""), reverse=True)
+        files = [
+            {
+                "name": m["filename"],
+                "originalName": m.get("originalName"),
+                "size": m.get("size"),
+                "uploadDate": m.get("uploadDate"),
+                "origin": m.get("originAlias"),
+                "path": f"{url_prefix}/{m['filename']}",
+            }
+            for m in all_meta
+        ]
+        available_origins = sorted(
+            list(set(m.get("originAlias") for m in all_meta if m.get("originAlias")))
+        )
+        return {
+            "files": files,
+            "totalFiles": len(files),
+            "availableOrigins": available_origins,
+        }
 
     # Additional helper methods that might be useful externally
     def get_queue_file_path(self) -> Optional[str]:
