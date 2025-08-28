@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional, List
 
 from flask import current_app, Blueprint, request
 from flask_cors import CORS
+from cors_helpers import configure_cors  # absolute import; project root on PYTHONPATH
 from .fileserver_types import Metadata
 
 class EmailJob:
@@ -166,21 +167,12 @@ class FileServer:
         # init queue file if not exists
         if not os.path.exists(self._queue_file()):
             self._save_queue([])
-        # Derive CORS origins list
-        origins_raw = app.config.get("FILESERVER_CORS_ORIGINS", "*")
-        if isinstance(origins_raw, str):
-            origins_list = [o.strip() for o in origins_raw.split(",") if o.strip()]
-        else:
-            origins_list = origins_raw or ["*"]
-
-        cors_resources = {
-            f"{url_prefix}/*": {"origins": origins_list},
-            "/socket.io/*": {"origins": origins_list},
-        }
-        CORS(
+        # Derive CORS origins list using shared helper
+        origins_list = configure_cors(
             app,
-            resources=cors_resources,
-            supports_credentials=app.config.get("FILESERVER_CORS_SUPPORTS_CREDENTIALS", False),
+            url_prefix=url_prefix,
+            origins_config_key="FILESERVER_CORS_ORIGINS",
+            creds_config_key="FILESERVER_CORS_SUPPORTS_CREDENTIALS",
         )
         if socketio and getattr(socketio, "cors_allowed_origins", None) in (None, "*"):
             socketio.cors_allowed_origins = origins_list
