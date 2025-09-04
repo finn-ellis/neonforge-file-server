@@ -98,9 +98,8 @@ def create_blueprint(fs: "FileServer", url_prefix: str) -> Blueprint:
         fs._save_metadata(metadata)  # noqa: SLF001
         current_app.logger.info(f"File uploaded from {alias} ({ip}): {file.filename}")
 
-        if fs._socketio:  # noqa: SLF001
-            files_data = fs._get_all_files_and_origins(url_prefix)  # noqa: SLF001
-            fs._socketio.emit("files_updated", files_data)  # noqa: SLF001
+        if fs._socketio:
+            fs._send_socket_update()
 
         return jsonify(
             {
@@ -159,6 +158,7 @@ def create_blueprint(fs: "FileServer", url_prefix: str) -> Blueprint:
         queue = fs._load_queue()  # noqa: SLF001
         queue.append(job)
         fs._save_queue(queue)  # noqa: SLF001
+        fs.use_recent_email(email)  # remove from recent emails
         current_app.logger.info(
             f"Email queued: {email} for file {filename} (Job ID: {job_id})"
         )

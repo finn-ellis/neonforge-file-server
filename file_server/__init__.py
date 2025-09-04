@@ -47,6 +47,7 @@ class FileServer:
         self._alias_lock = threading.Lock()
         self._next_alias_index = 1
         self._queue_lock = threading.Lock()
+        self._recent_emails = []
         if app is not None:
             self.init_app(app)
 
@@ -160,6 +161,7 @@ class FileServer:
     def init_app(self, app, url_prefix: str = "/api/files", socketio=None):
         self._app = app
         self._socketio = socketio
+        self._url_prefix = url_prefix
         # Config defaults (only set if absent)
         app.config.setdefault("FILESERVER_CORS_ORIGINS", "*")
         app.config.setdefault("FILESERVER_CORS_SUPPORTS_CREDENTIALS", False)
@@ -185,19 +187,27 @@ class FileServer:
         if self._socketio:
             @self._socketio.on('connect')
             def handle_connect():
-                if self._socketio:
-                    data = self._get_all_files_and_origins(url_prefix)
-                    self._socketio.emit('files_updated', data)
+                self._send_socket_update()
+                self._send_recent_emails()
 
             @self._socketio.on('get_files')
             def handle_get_files(data):
                 if self._socketio:
-                    origin = data.get('origin') if data else None
-                    files_data = self._get_all_files_and_origins(url_prefix)
-                    if origin and origin != 'all':
-                        files_data['files'] = [f for f in files_data['files'] if f['origin'] == origin]
-                        files_data['totalFiles'] = len(files_data['files'])
-                    self._socketio.emit('files_updated', files_data)
+                    # dont think we should filter on server - theres not a huge dataset
+                    # origin = data.get('origin') if data else None
+                    self._send_socket_update()
+
+    def _send_socket_update(self):
+        if self._socketio:
+            files_data = self._get_all_files_and_origins(self._url_prefix)
+            self._socketio.emit('file_data', files_data)
+    
+    def _send_recent_emails(self):
+        if self._socketio:
+            # Get last five entries and reverse to have most recent first (avoid list.reverse() returning None)
+            recents = [eData for (eData, _ts) in self._recent_emails[-5:]][::-1]
+            print("Recent Emails:", recents)
+            self._socketio.emit('recent_emails', recents)
 
     def _get_all_files_and_origins(self, url_prefix: str) -> dict:
         all_meta = self._load_all_metadata()
@@ -264,5 +274,20 @@ class FileServer:
         metadata = self._load_metadata(filename)
         job = EmailJob(job_id, email, filename, file_path, ip, options)
         return job.to_dict()
+
+    def log_recent_email(self, email: str, email_consent: bool = False):
+        print("Logging recent email:", email, email_consent)
+        if email == '':
+            return
+        self._recent_emails.append(({'email': email, 'email_consent': email_consent}, datetime.now()))
+        self._send_recent_emails()
+    
+    def use_recent_email(self, email: str):
+        # remove recently used email from list:
+        for index, (eData, timestamp) in enumerate(self._recent_emails):
+            if eData['email'] == email:
+                del self._recent_emails[index]
+                self._send_recent_emails()
+                break
 
 __all__ = ["FileServer", "EmailJob"]

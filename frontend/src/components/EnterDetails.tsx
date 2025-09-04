@@ -10,21 +10,22 @@ interface FileInfo {
 }
 
 interface EnterDetailsProps {
+  recentEmails: { email: string; email_consent: boolean }[];
   file: FileInfo;
   onBack: () => void;
   onSend: (email: string, options: EmailOptions) => void;
 }
 
 interface EmailOptions {
-  stayInTouch: boolean;
+  emailConsent: boolean;
   includeScreenshots: boolean;
   include3DModels: boolean;
 }
 
-const EnterDetails: React.FC<EnterDetailsProps> = ({ file, onBack, onSend }) => {
+const EnterDetails: React.FC<EnterDetailsProps> = ({ recentEmails, file, onBack, onSend }) => {
   const [email, setEmail] = useState('');
   const [options, setOptions] = useState<EmailOptions>({
-    stayInTouch: false,
+    emailConsent: false,
     includeScreenshots: true,
     include3DModels: true
   });
@@ -70,6 +71,15 @@ const EnterDetails: React.FC<EnterDetailsProps> = ({ file, onBack, onSend }) => 
     }));
   };
 
+  const chooseRecentEmail = (emailObj: { email: string; email_consent: boolean }) => {
+    console.log(emailObj)
+    setEmail(emailObj.email);
+    setOptions(prev => ({
+      ...prev,
+      emailConsent: emailObj.email_consent
+    }));
+  };
+
   return (
     <div className="enter-details-overlay">
       <div className="enter-details-modal">
@@ -110,6 +120,11 @@ const EnterDetails: React.FC<EnterDetailsProps> = ({ file, onBack, onSend }) => 
                 disabled={isSubmitting}
                 required
               />
+              <div className="options-list">
+                {recentEmails.map((emailObj, index) => (
+                  <label className="option-item" key={index} onClick={() => chooseRecentEmail(emailObj)}>{emailObj.email}</label>
+                ))}
+              </div>
             </div>
 
             {/* Options */}
@@ -119,8 +134,8 @@ const EnterDetails: React.FC<EnterDetailsProps> = ({ file, onBack, onSend }) => 
                 <label className="option-item">
                   <input
                     type="checkbox"
-                    checked={options.stayInTouch}
-                    onChange={() => handleOptionChange('stayInTouch')}
+                    checked={options.emailConsent}
+                    onChange={() => handleOptionChange('emailConsent')}
                     disabled={isSubmitting}
                   />
                   <span className="option-label">

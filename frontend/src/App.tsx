@@ -28,7 +28,7 @@ interface OriginStats {
 }
 
 interface EmailOptions {
-  stayInTouch: boolean;
+  emailConsent: boolean;
   includeScreenshots: boolean;
   include3DModels: boolean;
 }
@@ -37,6 +37,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000') +
 
 function App() {
   const [files, setFiles] = useState<FileInfo[]>([]);
+  const [recentEmails, setRecentEmails] = useState<{ email: string; email_consent: boolean }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [selectedFileForDetails, setSelectedFileForDetails] = useState<FileInfo | null>(null);
@@ -60,14 +61,18 @@ function App() {
 
   // Listen for socket updates
   useEffect(() => {
-    socket.on('files_updated', (data) => {
+    socket.on('file_data', (data) => {
       setFiles(data.files || []);
       setAvailableOrigins(data.availableOrigins || []);
+    });
+    socket.on('recent_emails', (recent_emails) => {
+      console.log(recent_emails)
+      setRecentEmails(recent_emails || []);
     });
     // Initial fetch (optional, or wait for first socket event)
     socket.emit('get_files', { origin: selectedOrigin });
     return () => {
-      socket.off('files_updated');
+      socket.off('file_data');
     };
   }, [selectedOrigin]);
 
@@ -380,6 +385,7 @@ function App() {
       {/* Enter Details Modal */}
       {selectedFileForDetails && (
         <EnterDetails
+          recentEmails={recentEmails}
           file={selectedFileForDetails}
           onBack={handleDetailsBack}
           onSend={handleDetailsSend}
