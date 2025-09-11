@@ -1,6 +1,7 @@
 import socket
 from zeroconf import ServiceInfo, Zeroconf
 from time import sleep
+import gevent
 
 
 # --- Service Discovery Class ---
@@ -37,20 +38,31 @@ class ServiceAnnouncer:
         """
         Registers the service on the network. This should be run in a thread.
         """
-        ip_address = self._get_local_ip()
-        print(f"INFO: Announcing service '{self.service_name}' on IP {ip_address}:{self.port}")
+        try:
+            print("INFO: ServiceAnnouncer.start() method called")
+            ip_address = self._get_local_ip()
+            print(f"INFO: Announcing service '{self.service_name}' on IP {ip_address}:{self.port}")
 
-        self.service_info = ServiceInfo(
-            self.service_type,
-            f"{self.service_name}.{self.service_type}",
-            addresses=[socket.inet_aton(ip_address)],
-            port=self.port,
-            properties={'description': 'NeonForge File Server.'},
-        )
+            self.service_info = ServiceInfo(
+                self.service_type,
+                f"{self.service_name}.{self.service_type}",
+                addresses=[socket.inet_aton(ip_address)],
+                port=self.port,
+                properties={'description': 'NeonForge File Server.'},
+            )
 
-        self.zeroconf = Zeroconf()
-        self.zeroconf.register_service(self.service_info)
-        print("INFO: Service registered.")
+            self.zeroconf = Zeroconf()
+            self.zeroconf.register_service(self.service_info)
+            print("INFO: Service registered.")
+            
+            # Yield control to allow other green threads to run
+            # gevent.sleep(0)
+        except Exception as e:
+            print(f"ERROR: ServiceAnnouncer.start() failed: {str(e)}")
+            import traceback
+            print(f"ERROR: Traceback: {traceback.format_exc()}")
+            # Re-raise to ensure we see any failures
+            raise
 
     def stop(self):
         """

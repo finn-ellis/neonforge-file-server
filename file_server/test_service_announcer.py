@@ -19,16 +19,17 @@ class MyListener(ServiceListener):
             print(f"Service {name} added, service info: {info}")
             self.found_services.append(info)
 
-def main():
+def test():
     """
-    Tests if the '_file-server._tcp.local.' service is being announced.
+    Tests if the '_http._tcp.local.' service is being announced.
     """
-    SERVICE_TYPE = "_file-server._tcp.local."
+    SERVICE_TYPE = "_http._tcp.local."
     SERVICE_NAME = "NF"
 
     zeroconf = Zeroconf()
     listener = MyListener()
     browser = ServiceBrowser(zeroconf, SERVICE_TYPE, listener)
+    full_name = f"{SERVICE_NAME}.{SERVICE_TYPE}"
 
     print(f"Browsing for {SERVICE_TYPE} services for 10 seconds...")
     time.sleep(10) # Wait for services to be discovered
@@ -47,10 +48,10 @@ def main():
             break
     
     if not found_our_service:
-        print(f"Could not find the '{SERVICE_NAME}' service.")
+        print(f"Could not find the '{full_name}' service.")
 
     browser.cancel()
     zeroconf.close()
 
 if __name__ == "__main__":
-    main()
+    test()

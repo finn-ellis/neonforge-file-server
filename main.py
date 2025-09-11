@@ -24,7 +24,7 @@ if __name__ == "__main__":
     # --- Zeroconf Service Announcement ---
     SERVICE_TYPE = "_file-server._tcp.local."
     SERVICE_NAME = "NF"
-    SERVER_PORT = 5000 # Default Flask port
+    SERVER_PORT = 80 # Default Flask port
 
     announcer = ServiceAnnouncer(SERVICE_TYPE, SERVICE_NAME, SERVER_PORT)
 
